@@ -1,0 +1,83 @@
+Some Definitions:
+- SOCKET = a port abstraction that is characterized by its use depending on a couple (tuple) of fields: src, dst, srcport, dstport;
+a socket defines an application: where it attaches on the network. Sockets used for both UDP and TCP protocols
+
+- BIND = local address (port) that is associated with a socket - int bind(int socket, struct sockaddr *address, int addr_len). It is
+useful to bind an address to a port via hashmap (node 1 -> socket 1, node 2 -> socket 2, ..., node n -> socket n).
+
+- CLOSE = release the socket
+
+for TCP (proj3):
+- LISTEN = announce willingness to accept a connection - int Iisten(int socket, int backlog)
+
+- ACCEPT = passively establish an incoming connection - intaccept(int socket, struct sockaddr *address, int addr_len)
+
+- CONNECT = actively attempt to establish conneciton - intconnect(int socket, struct sockaddr *address, int addr_len)
+
+- in TCP, reliable bytestreams "piggyback" acknowledgements on data segements that are sent in back to the source
+(but for project 3 it states SYN, ACK, and FIN doesn't carry payload data...)
+
+- Once the connection is initiated in the three way handshake, both connections will exchange information about it’s advertised window.
+So the SYN will include the initial advertise window, which should be the full buffer size since no data has been transmitted yet
+and the SYN+ACK will include it’s advertised window. Each packet transmitted should include information about the advertised window
+through out the connection.
+
+- max connections are 10 connections at once, so for each node that has an array of sockets (ports) we only need to make
+it a size of 10 elements (make a hashtable)
+
+- TCP header: 16-bit srcport, 16-bit destport, seqnum, acknum (doesn't increase upon loss), [headerlen], flags,
+advertised window, [checksum], [urgent pointer], [options], DATA
+- flags header includes 9 1-bit flags: NS, CWR, ECE, URG, *ACK, PSH, RST, *SYN, *FIN
+*ACK = flag that's set to 1 if the ack field contains a valid acknum
+*SYN = synchronize sequence numbers. Only the first packet sent from each end should have this flag set to 1.
+*FIN = last packet from sender
+
+- seqnum and acknum are byte-dependent rather than packet-dependent. 
+
+- advertised window in TCP header is relevant to ack and is in bytes. Used in flow control... extra credit?
+
+- Both sender and receiver must be ready before we start transfer of data between connections. Called signaling/3-way handshake:
+Lecture 14 slide 28:
+***3-way handshake sequence: establishing connection implementation***
+   -(while server is listening) client node sends SYN = 1, (SEQ=x) to server node.
+   -server node sends SYN = 1, (SEQ=y, ACK=x+1) back to client.
+   -client sends (SEQ=x+1, ACK=y+1) back to server. Datastream starts after this moment.
+- Got to make sure duplicate/multiple SYN packets aren't sent to the server.
+
+Process:
+- Whole system (ea. node) starts as a CLOSED server. Once cmdTestServer( [address], [port]); is ran, a node @address becomes
+a server and LISTENS
+- Once SYN received (still listening for other clients) you send back SYNs to the client(s). After 3-way handshake a CONNECTION
+is established.
+- RELEASED() releases a client from a server (if client done) without shutting the whole server down. TCP uses a “symmetric”
+close in which both sides shutdown independently
+
+Lecture 14 slide 42:
+- Implementation of RELEASED(): *(after status set to ESTABLISHED for both server and client)*
+   -active(client) sends FIN = 1, (SEQ=x) to passive(server)		*STATUS set to FIN_WAIT_1 for client*
+   -passive(server) sends (SEQ=y, ACK=x+1) to active(client)		*STATUS set to CLOSE_WAIT* for server*
+   -passive(server) sends FIN = 1, (SEQ=y, ACK=x+1) to active(client)	*STATUS set to LAST_ACK for server* //closed from passive to active
+   -active(client) sends (SEQ=x+1, ACK=y+1) to passive(server)	 	*STATUS set to TIME_WAIT for client*//closed from active to passive
+-***Each FIN/ACK closes one direction of data transfer***		*both are now CLOSED*
+
+- Timer Method:
+In this method, your application layer will periodically write to the socket. 
+For each connection keep track of a counter and write the entirity of the buffer.
+
+- Task Method
+In the Task Method, the application will post a task every time it is successfully able to write data
+(i.e. write returns a value greater then 0). This allows for other components in the applications to run in between writes.
+The above two methods can be used for the client layer but rather then writting the client should be reading data.
+So if you were to use the Timer Method you would use thereadfunction every few seconds and print it to the transport debug channel.
+
+*Sliding Window:*
+Your protocol should use the advertised window field along with the sequence and acknowledgement numbers to implement flow control
+so that a fast sender will not overwhelm a slow receiver. The advertised window field tells the other end how much buffer space 
+is available to hold data that has not yet been consumed by the application. Note that this will not be much of an issue in this assignment...
+
+socket_store_t mySocket = new socket_store_t;
+mySocket.store_t = port; //socket fd is equal to the port number being accessed
+mySocket.socket_state = LISTEN;
+"Transport.socketPort.insert(port, socket_store_t mySocket);" //insert socket into hashmap @ index port
+//bind socket?//
+//*start a timer*//

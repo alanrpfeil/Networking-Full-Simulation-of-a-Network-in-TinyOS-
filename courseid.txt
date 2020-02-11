@@ -1,0 +1,14 @@
+course ID's
+--CSE120
+35305
+36287
+--seminar
+30342
+--Databases
+35210
+35211
+--eng econ
+33863
+--GRAPHICS
+35897
+35901
